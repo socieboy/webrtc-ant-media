@@ -16,12 +16,16 @@ from gi.repository import GstWebRTC
 gi.require_version('GstSdp', '1.0')
 from gi.repository import GstSdp
 
+# Folowwing pipeline is for CSI Live Camera
+# PIPELINE_DESC = '''
+#  nvarguscamerasrc ! nvvideoconvert ! queue ! vp8enc deadline=1 ! rtpvp8pay !
+#  queue ! application/x-rtp,media=video,encoding-name=VP8,payload=96 ! webrtcbin name=sendrecv 
+# '''
+
+# This one can be used for testing
 PIPELINE_DESC = '''
-webrtcbin name=sendrecv bundle-policy=max-bundle stun-server=stun://stun.l.google.com:19302
  videotestsrc is-live=true pattern=ball ! videoconvert ! queue ! vp8enc deadline=1 ! rtpvp8pay !
- queue ! application/x-rtp,media=video,encoding-name=VP8,payload=97 ! sendrecv.
- audiotestsrc is-live=true wave=red-noise ! audioconvert ! audioresample ! queue ! opusenc ! rtpopuspay !
- queue ! application/x-rtp,media=audio,encoding-name=OPUS,payload=96 ! sendrecv.
+ queue ! application/x-rtp,media=video,encoding-name=VP8,payload=96 ! webrtcbin name=sendrecv 
 '''
 
 WEBSOCKET_URL = 'wss://media.streamit.live:5443/LiveApp/websocket?rtmpForward=undefined'
@@ -47,9 +51,8 @@ class WebRTCClient:
         print('Send SDP Offer')
         sdp = offer.sdp.as_text()
         loop = asyncio.new_event_loop()
-        loop.run_until_complete(self.conn.send('{"command":"takeConfiguration", "streamId": "' + self.id + '", "id":"test" "type": "offer", "sdp": "' + sdp +'"}'))
+        loop.run_until_complete(self.conn.send('{"command":"takeConfiguration", "streamId": "' + self.id + '", "type": "offer", "sdp": "' + sdp +'"}'))
         loop.close()
-        print('Close')
 
     def on_offer_created(self, promise, _, __):
         print('Offer Created')
@@ -67,8 +70,7 @@ class WebRTCClient:
         element.emit('create-offer', None, promise)
 
     def send_ice_candidate_message(self, _, mlineindex, candidate):
-        print('AqUI')
-        data = 'ice: {"command":"takeCandidate","streamId":"' + self.id + '","label":'+ str(mlineindex) +',"candidate":"' +  str(candidate) +'"}'
+        data = '{"command":"takeCandidate","streamId":"' + self.id + '","label":'+ str(mlineindex) +', "id":"' + str(mlineindex) +'" "candidate":"' +  str(candidate) +'"}'
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self.conn.send(data))
         loop.close()
@@ -78,7 +80,6 @@ class WebRTCClient:
         # if not pad.has_current_caps():
         #     print (pad, 'has no caps, ignoring')
         #     return
-
         # caps = pad.get_current_caps()
         # assert (len(caps))
         # s = caps[0]
@@ -104,68 +105,44 @@ class WebRTCClient:
         #     conv.link(resample)
         #     resample.link(sink)
 
-    def on_add_ice_candidate (object, mline_index, candidate, udata):
-        pritn('Add ICE Candidate')
-        print(mline_index)
-        print(candidate)
-        print(u)
-
     def on_incoming_stream(self, _, pad):
         print('on_incoming_stream')
-        if pad.direction != Gst.PadDirection.SRC:
-            return
-
-        decodebin = Gst.ElementFactory.make('decodebin')
-        decodebin.connect('pad-added', self.on_incoming_decodebin_stream)
-        self.pipe.add(decodebin)
-        decodebin.sync_state_with_parent()
-        self.webrtc.link(decodebin)
-
-    def on_data_channel(self, candidate, udata):
-        print('On Data Channel')
+        # if pad.direction != Gst.PadDirection.SRC:
+        #     return
+        # decodebin = Gst.ElementFactory.make('decodebin')
+        # decodebin.connect('pad-added', self.on_incoming_decodebin_stream)
+        # self.pipe.add(decodebin)
+        # decodebin.sync_state_with_parent()
+        # self.webrtc.link(decodebin)
 
     def start_pipeline(self):
         print('Creating WebRTC Pipeline')
-        # self.pipe = Gst.parse_launch(PIPELINE_DESC)
-        # self.webrtc = self.pipe.get_by_name('sendrecv')
-        # self.webrtc.connect('on-negotiation-needed', self.on_negotiation_needed)
-        # self.webrtc.connect('on-ice-candidate', self.send_ice_candidate_message)
-        # self.webrtc.connect('pad-added', self.on_incoming_stream)
-        # self.webrtc.connect('on-new-transceiver', self.on_new_trans)
-        # self.webrtc.connect('no-more-pads', self.no_more_pads)
-        # self.pipe.set_state(Gst.State.PLAYING)
-
-    def no_more_pads(self, object, data):
-        print(data)
-
-    def on_new_trans(self, object, args, udata):
-        print(udata)
+        self.pipe = Gst.parse_launch(PIPELINE_DESC)
+        self.webrtc = self.pipe.get_by_name('sendrecv')
+        self.webrtc.connect('on-negotiation-needed', self.on_negotiation_needed)
+        self.webrtc.connect('on-ice-candidate', self.send_ice_candidate_message)
+        self.webrtc.connect('pad-added', self.on_incoming_stream)
+        self.pipe.set_state(Gst.State.PLAYING)
 
     def notification(self, data):
         if(data['definition'] == 'publish_started'):
             print('Publish Started')
+        else:
+            print(data['definition'])
 
     def take_candidate(self, data):
-        print(data)
-        # candidate = data['candidate']
-        # sdpmlineindex = data['label']
-        # self.webrtc.emit('add-ice-candidate', sdpmlineindex, candidate)
+        if(data['candidate'] and data['label']):
+            self.webrtc.emit('add-ice-candidate', data['label'], data['candidate'])
 
     def take_configuration(self, data):
-        print(data)
-        # assert (self.webrtc)
-        # assert(data['type'] == 'answer')
-        # res, sdpmsg = GstSdp.SDPMessage.new()
-        # GstSdp.sdp_message_parse_buffer(bytes(data['sdp'].encode()), sdpmsg)
-        # answer = GstWebRTC.WebRTCSessionDescription.new(GstWebRTC.WebRTCSDPType.ANSWER, sdpmsg)
-        # promise = Gst.Promise.new()
-        # self.webrtc.emit('set-remote-description', answer, promise)
-        # promise.interrupt()
-
-    def handle_others(self, data):
-        print('Handle Other Commands')
         assert (self.webrtc)
-        print(data)
+        assert(data['type'] == 'answer')
+        res, sdpmsg = GstSdp.SDPMessage.new()
+        GstSdp.sdp_message_parse_buffer(bytes(data['sdp'].encode()), sdpmsg)
+        answer = GstWebRTC.WebRTCSessionDescription.new(GstWebRTC.WebRTCSDPType.ANSWER, sdpmsg)
+        promise = Gst.Promise.new()
+        self.webrtc.emit('set-remote-description', answer, promise)
+        promise.interrupt()
 
     def close_pipeline(self):
         print('Close Pipeline')
@@ -174,7 +151,7 @@ class WebRTCClient:
         self.webrtc = None
 
     async def loop(self):
-        print('Client Loop')
+        print('Inititialized')
         assert self.conn
         async for message in self.conn:
 
@@ -190,29 +167,8 @@ class WebRTCClient:
                 self.take_configuration(data)
             elif(data['command'] == 'notification'):
                 self.notification(data)
-            else:
-                self.handle_others(data)
-            # elif(data['command'] == 'stop'):
-            #     print('Command: stop')
-            #     self.handle_sdp(data)
-            #     self.close_pipeline()
-            # elif(data['command'] == 'error'):
-            #     print('Command: error')
-            # elif(data['command'] == 'streamInformation'):
-            #     print('Command: streamInformation')
-            # if(data['command'] == 'roomInformation'):
-            #     print('Command: roomInformation')
-            # elif(data['command'] == 'pong'):
-            #     print('Command: pong')
-            # elif(data['command'] == 'trackList'):
-            #     print('Command: trackList')
-            # elif(data['command'] == 'connectWithNewId'):
-            #     print('Command: connectWithNewId')
-            # elif(data['command'] == 'peerMessageCommand'):
-            #     print('Command: peerMessageCommand')
             
         
-        print('Salio')
         self.close_pipeline()
         return 0
 
@@ -236,11 +192,6 @@ if __name__=='__main__':
     Gst.init(None)
     if not check_plugins():
         sys.exit(1)
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('peerid', help='String ID of the peer to connect to')
-    # parser.add_argument('--server', help='Signalling server to connect to, eg "wss://127.0.0.1:8443"')
-    # args = parser.parse_args()
-    # our_id = random.randrange(10, 10000)
     client = WebRTCClient('frank-edge')
     loop = asyncio.get_event_loop()
     loop.run_until_complete(client.connect())
