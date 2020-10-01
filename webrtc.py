@@ -16,12 +16,14 @@ from gi.repository import GstWebRTC
 gi.require_version('GstSdp', '1.0')
 from gi.repository import GstSdp
 
+# gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! nvv4l2h264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://media.streamit.live/LiveApp/frank-edge live=1' 
 # Folowwing pipeline is for CSI Live Camera
 # PIPELINE_DESC = '''
 #  nvarguscamerasrc ! nvvideoconvert ! queue ! vp8enc deadline=1 ! rtpvp8pay !
 #  queue ! application/x-rtp,media=video,encoding-name=VP8,payload=96 ! webrtcbin name=sendrecv 
 # '''
 
+# gst-launch-1.0 -v videotestsrc ! omxh264enc ! 'video/x-h264,stream-format=(string)avc' ! flvmux ! rtmpsink location='rtmp://media.streamit.live/LiveApp/bill-edge live=1'
 # This one can be used for testing
 PIPELINE_DESC = '''
  videotestsrc is-live=true pattern=ball ! videoconvert ! queue ! vp8enc deadline=1 ! rtpvp8pay !
@@ -58,7 +60,8 @@ class WebRTCClient:
         print('Offer Created')
         promise.wait()
         reply = promise.get_reply()
-        offer = reply['offer']
+        offer = reply.get_value('offer')
+        # offer = reply['offer']
         promise = Gst.Promise.new()
         self.webrtc.emit('set-local-description', offer, promise)
         promise.interrupt()
@@ -167,6 +170,8 @@ class WebRTCClient:
                 self.take_configuration(data)
             elif(data['command'] == 'notification'):
                 self.notification(data)
+            elif(data['command'] == 'error'):
+                 print('Message: ' + data['definition']);
             
         
         self.close_pipeline()
