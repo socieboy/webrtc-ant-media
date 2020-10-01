@@ -58,7 +58,7 @@ class WebRTCClient:
         print('Offer Created')
         promise.wait()
         reply = promise.get_reply()
-        offer = reply['offer']
+        offer = reply.get_value('offer') #Please check -> https://github.com/centricular/gstwebrtc-demos/issues/42
         promise = Gst.Promise.new()
         self.webrtc.emit('set-local-description', offer, promise)
         promise.interrupt()
@@ -167,6 +167,8 @@ class WebRTCClient:
                 self.take_configuration(data)
             elif(data['command'] == 'notification'):
                 self.notification(data)
+            elif(data['command'] == 'error'):
+                 print('Message: ' + data['definition']);
             
         
         self.close_pipeline()
