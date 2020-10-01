@@ -60,8 +60,7 @@ class WebRTCClient:
         print('Offer Created')
         promise.wait()
         reply = promise.get_reply()
-        offer = reply.get_value('offer')
-        # offer = reply['offer']
+        offer = reply.get_value('offer') #Please check -> https://github.com/centricular/gstwebrtc-demos/issues/42
         promise = Gst.Promise.new()
         self.webrtc.emit('set-local-description', offer, promise)
         promise.interrupt()
