@@ -133,7 +133,6 @@ class WebRTCClient:
             print(data['definition'])
 
     def take_candidate(self, data):
-        if(data['candidate'] and data['label']):
             self.webrtc.emit('add-ice-candidate', data['label'], data['candidate'])
 
     def take_configuration(self, data):
