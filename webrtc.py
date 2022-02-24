@@ -69,7 +69,7 @@ class WebRTCClient:
         promise = Gst.Promise.new_with_change_func(self.on_offer_created, element, None)
         element.emit('create-offer', None, promise)
 
-    def send_ice__message(self, _, mlineindex, candidate):
+    def send_ice_candidate_message(self, _, mlineindex, candidate):
         data = '{"command":"takeCandidate","streamId":"' + self.id + '","label":'+ str(mlineindex) +', "id":"' + str(mlineindex) +'" "candidate":"' +  str(candidate) +'"}'
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self.conn.send(data))
